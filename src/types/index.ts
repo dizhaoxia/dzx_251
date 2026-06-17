@@ -25,6 +25,7 @@ export interface Courseware {
   totalPages: number
   currentPage: number
   scale: number
+  dataBase64?: string
 }
 
 export interface Playback {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { Playback } from '@/types'
 
+const LIST_STORAGE_KEY = 'playback_list_v1'
 const PROGRESS_STORAGE_KEY = 'playback_progress'
 
 interface PlaybackState {
@@ -10,6 +11,26 @@ interface PlaybackState {
   currentTime: number
   duration: number
   volume: number
+}
+
+function loadListFromStorage(): Playback[] {
+  try {
+    const stored = localStorage.getItem(LIST_STORAGE_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch (e) {
+    console.error('加载回放列表失败:', e)
+  }
+  return []
+}
+
+function saveListToStorage(list: Playback[]): void {
+  try {
+    localStorage.setItem(LIST_STORAGE_KEY, JSON.stringify(list))
+  } catch (e) {
+    console.error('保存回放列表失败:', e)
+  }
 }
 
 function loadProgress(playbackId: string): number {
@@ -36,9 +57,11 @@ function saveProgress(playbackId: string, time: number): void {
   }
 }
 
+const storedList = loadListFromStorage()
+
 export const usePlaybackStore = defineStore('playback', {
   state: (): PlaybackState => ({
-    list: [],
+    list: storedList,
     currentPlayback: null,
     isPlaying: false,
     currentTime: 0,
@@ -47,13 +70,31 @@ export const usePlaybackStore = defineStore('playback', {
   }),
 
   actions: {
+    _persistList() {
+      saveListToStorage(this.list)
+    },
+
     setList(list: Playback[]) {
-      this.list = list
+      const existingIds = new Set(this.list.map(p => p.id))
+      const merged = [...this.list]
+      for (const item of list) {
+        if (!existingIds.has(item.id)) {
+          merged.push(item)
+        } else {
+          const idx = merged.findIndex(p => p.id === item.id)
+          if (idx !== -1) {
+            merged[idx] = { ...merged[idx], ...item }
+          }
+        }
+      }
+      this.list = merged
+      this._persistList()
     },
 
     addPlayback(playback: Playback) {
       if (!this.list.find(p => p.id === playback.id)) {
         this.list.unshift(playback)
+        this._persistList()
       }
     },
 

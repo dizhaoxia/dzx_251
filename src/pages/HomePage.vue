@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClassroomStore } from '@/stores/classroom'
 import { usePlaybackStore } from '@/stores/playback'
@@ -23,7 +23,7 @@ const userStore = useUserStore()
 
 const activeTab = ref<'classrooms' | 'playbacks'>('classrooms')
 
-const classrooms = ref<Classroom[]>([
+const defaultClassrooms: Classroom[] = [
   {
     id: 'class_001',
     name: '前端开发实战课程',
@@ -46,9 +46,9 @@ const classrooms = ref<Classroom[]>([
     endTime: dayjs().subtract(2, 'day').add(2, 'hour').toISOString(),
     playbackId: 'pb_003',
   },
-])
+]
 
-const mockPlaybacks = ref<Playback[]>([
+const defaultPlaybacks: Playback[] = [
   {
     id: 'pb_001',
     name: '第一节课：WebRTC入门基础',
@@ -81,7 +81,47 @@ const mockPlaybacks = ref<Playback[]>([
     currentTime: 0,
     isPlaying: false,
   },
-])
+]
+
+const classrooms = computed(() => {
+  const list: Classroom[] = []
+  const ids = new Set<string>()
+
+  for (const c of classroomStore.classroomList) {
+    ids.add(c.id)
+    list.push({ ...c })
+  }
+  for (const c of defaultClassrooms) {
+    if (!ids.has(c.id)) {
+      ids.add(c.id)
+      list.push({ ...c })
+    }
+  }
+
+  return list.sort((a, b) => {
+    const statusRank: Record<string, number> = { live: 0, waiting: 1, ended: 2 }
+    const rankA = statusRank[a.status] ?? 99
+    const rankB = statusRank[b.status] ?? 99
+    return rankA - rankB
+  })
+})
+
+const playbacks = computed(() => {
+  const list: Playback[] = []
+  const ids = new Set<string>()
+
+  for (const p of playbackStore.list) {
+    ids.add(p.id)
+    list.push({ ...p })
+  }
+  for (const p of defaultPlaybacks) {
+    if (!ids.has(p.id)) {
+      ids.add(p.id)
+      list.push({ ...p })
+    }
+  }
+  return list
+})
 
 const currentUser = computed(() => userStore.currentUser)
 
@@ -101,7 +141,7 @@ function enterClassroom(classroom: Classroom) {
 }
 
 function watchPlayback(playback: Playback) {
-  playbackStore.setList(mockPlaybacks.value)
+  playbackStore.setList(defaultPlaybacks)
   classroomStore.setMode('playback')
   router.push({
     path: '/classroom',
@@ -141,7 +181,7 @@ function getWatchProgress(playbackId: string) {
     if (stored) {
       const data = JSON.parse(stored)
       const progress = data[playbackId] || 0
-      const playback = mockPlaybacks.value.find(p => p.id === playbackId)
+      const playback = playbacks.value.find(p => p.id === playbackId)
       if (playback && playback.duration > 0) {
         return Math.round((progress / playback.duration) * 100)
       }
@@ -153,8 +193,8 @@ function getWatchProgress(playbackId: string) {
 
 onMounted(() => {
   userStore.initUser()
-  playbackStore.setList(mockPlaybacks.value)
-  classroomStore.setClassroomList(classrooms.value)
+  classroomStore.setClassroomList(defaultClassrooms)
+  playbackStore.setList(defaultPlaybacks)
 })
 </script>
 
@@ -197,7 +237,7 @@ onMounted(() => {
               <Film />
             </el-icon>
             <span>课堂回放</span>
-            <span class="tab-count">{{ mockPlaybacks.length }}</span>
+            <span class="tab-count">{{ playbacks.length }}</span>
           </button>
         </div>
       </div>
@@ -282,9 +322,17 @@ onMounted(() => {
               <div class="section-desc">观看已结束课程的录制回放，支持播放进度记忆</div>
             </div>
 
-            <div class="playback-grid">
+            <div v-if="playbacks.length === 0" class="empty-playbacks">
+              <el-icon :size="64" class="empty-playback-icon">
+                <Film />
+              </el-icon>
+              <h3>暂无回放内容</h3>
+              <p>结束直播后会自动生成课堂回放</p>
+            </div>
+
+            <div v-else class="playback-grid">
               <div
-                v-for="item in mockPlaybacks"
+                v-for="item in playbacks"
                 :key="item.id"
                 class="playback-card"
               >
@@ -304,7 +352,7 @@ onMounted(() => {
                   </div>
                 </div>
                 <div class="playback-info">
-                  <h3 class="playback-title">{{ item.name }}</h3>
+                  <h3 class="playback-title" :title="item.name">{{ item.name }}</h3>
                   <div class="playback-meta">
                     <span v-if="getWatchProgress(item.id) > 0" class="watch-progress">
                       已观看 {{ getWatchProgress(item.id) }}%
@@ -605,6 +653,28 @@ onMounted(() => {
   }
 }
 
+.empty-playbacks {
+  text-align: center;
+  padding: 60px 20px;
+  color: #909399;
+
+  .empty-playback-icon {
+    margin-bottom: 16px;
+    opacity: 0.4;
+  }
+
+  h3 {
+    margin: 0 0 8px;
+    color: #606266;
+    font-size: 18px;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+  }
+}
+
 .playback-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -624,7 +694,7 @@ onMounted(() => {
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
 
     .play-icon {
-      transform: scale(1.1);
+      transform: translate(-50%, -50%) scale(1.1);
     }
   }
 }

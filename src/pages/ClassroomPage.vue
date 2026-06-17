@@ -8,7 +8,7 @@ import { useUserStore } from '@/stores/user'
 import { wsManager } from '@/utils/websocket'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
-import type { Playback } from '@/types'
+import type { Playback, Classroom } from '@/types'
 import VideoGrid from '@/components/VideoGrid.vue'
 import VideoControls from '@/components/VideoControls.vue'
 import CoursewareViewer from '@/components/CoursewareViewer.vue'
@@ -109,7 +109,7 @@ function handleLeave() {
 function initMockData() {
   coursewareStore.setRole(true)
 
-  const mockCoursewares = [
+  const defaultCoursewares = [
     {
       id: 'cw_001',
       name: '第一章：前端开发基础.pdf',
@@ -129,12 +129,9 @@ function initMockData() {
       scale: 1,
     },
   ]
-  coursewareStore.setList(mockCoursewares)
-  if (mockCoursewares.length > 0) {
-    coursewareStore.selectCourseware(mockCoursewares[0].id)
-  }
+  coursewareStore.setList(defaultCoursewares)
 
-  const mockPlaybacks = [
+  const defaultPlaybacks = [
     {
       id: 'pb_001',
       name: '第一节课：WebRTC入门',
@@ -160,38 +157,58 @@ function initMockData() {
       isPlaying: false,
     },
   ]
-  playbackStore.setList(mockPlaybacks)
+  playbackStore.setList(defaultPlaybacks)
+
+  const defaultClassroom: Classroom = {
+    id: 'class_001',
+    name: '前端开发实战课程',
+    status: 'live',
+    startTime: dayjs().toISOString(),
+  }
 
   const existingClassroom = classroomStore.currentClassroom
-  if (!existingClassroom) {
-    classroomStore.enterClassroom({
-      id: 'class_001',
-      name: '前端开发实战课程',
-      status: 'live',
-      startTime: dayjs().toISOString(),
-    })
-  }
-
-  if (existingClassroom?.status === 'ended' && existingClassroom.playbackId) {
-    const targetPlayback = playbackStore.list.find(p => p.id === existingClassroom.playbackId)
-    if (targetPlayback) {
-      classroomStore.setMode('playback')
-      playbackStore.selectPlayback(targetPlayback)
-    }
-  }
-
   const modeParam = route.query.mode as string
-  if (modeParam === 'playback' && playbackStore.list.length > 0) {
+  const playbackIdParam = route.query.playbackId as string
+
+  if (modeParam === 'playback') {
+    if (!existingClassroom || existingClassroom.status !== 'ended') {
+      const endedClassroom: Classroom = {
+        id: 'class_ended_' + Date.now(),
+        name: existingClassroom?.name || '课堂回放',
+        status: 'ended',
+        startTime: dayjs().subtract(1, 'hour').toISOString(),
+        endTime: dayjs().toISOString(),
+        playbackId: playbackIdParam || undefined,
+      }
+      classroomStore.enterClassroom(endedClassroom)
+    }
     classroomStore.setMode('playback')
-    const playbackId = route.query.playbackId as string
-    if (playbackId) {
-      const target = playbackStore.list.find(p => p.id === playbackId)
+    if (playbackIdParam) {
+      const target = playbackStore.list.find(p => p.id === playbackIdParam)
       if (target) {
         playbackStore.selectPlayback(target)
-      } else {
+      } else if (playbackStore.list.length > 0) {
         playbackStore.selectPlayback(playbackStore.list[0])
       }
-    } else {
+    } else if (playbackStore.list.length > 0) {
+      playbackStore.selectPlayback(playbackStore.list[0])
+    }
+    return
+  }
+
+  if (!existingClassroom) {
+    classroomStore.enterClassroom(defaultClassroom)
+  } else if (existingClassroom.status === 'ended') {
+    if (existingClassroom.playbackId) {
+      classroomStore.setMode('playback')
+      const targetPlayback = playbackStore.list.find(p => p.id === existingClassroom.playbackId)
+      if (targetPlayback) {
+        playbackStore.selectPlayback(targetPlayback)
+      } else if (playbackStore.list.length > 0) {
+        playbackStore.selectPlayback(playbackStore.list[0])
+      }
+    } else if (playbackStore.list.length > 0) {
+      classroomStore.setMode('playback')
       playbackStore.selectPlayback(playbackStore.list[0])
     }
   }
@@ -212,7 +229,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  classroomStore.leaveClassroom()
 })
 </script>
 
