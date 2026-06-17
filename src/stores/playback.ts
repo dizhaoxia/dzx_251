@@ -51,6 +51,12 @@ export const usePlaybackStore = defineStore('playback', {
       this.list = list
     },
 
+    addPlayback(playback: Playback) {
+      if (!this.list.find(p => p.id === playback.id)) {
+        this.list.unshift(playback)
+      }
+    },
+
     selectPlayback(playback: Playback) {
       this.currentPlayback = playback
       this.currentTime = loadProgress(playback.id)

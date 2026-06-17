@@ -42,4 +42,5 @@ export interface Classroom {
   status: 'waiting' | 'live' | 'ended'
   startTime: string
   endTime?: string
+  playbackId?: string
 }
